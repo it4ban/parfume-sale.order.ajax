@@ -56,6 +56,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			this.hasErrorSection = {};
 			this.pickUpPagination = {};
 			this.timeOut = {};
+			this.changeUserData = undefined;
 			this.isMobile = BX.browser.IsMobile();
 			this.isHttps = window.location.protocol === 'https:';
 			this.orderSaveAllowed = false;
@@ -4212,6 +4213,9 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 						name: 'ORDER_PROP_' + altProperty.ID,
 						value: altProperty.VALUE,
 					},
+					attr: {
+						disabled: true,
+					},
 				});
 
 				altNode.appendChild(label);
@@ -4674,25 +4678,16 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			if (!this.result.PAY_SYSTEM || (this.result.PAY_SYSTEM.length == 0 && this.result.PAY_FROM_ACCOUNT != 'Y'))
 				return;
 
-			var paySystemInfoContainer = BX.create('DIV', {
-					props: {
-						className: (this.result.PAY_SYSTEM.length == 0 ? 'col-sm-12' : 'col-sm-5') + ' bx-soa-pp-desc-container',
-					},
-				}),
-				innerPs,
-				extPs,
-				delimiter,
-				currentPaySystem,
-				logotype,
-				logoNode,
-				subTitle,
-				label,
-				title,
-				price;
+			// var paySystemInfoContainer = BX.create('DIV', {
+			// 		props: {
+			// 			className: (this.result.PAY_SYSTEM.length == 0 ? 'col-sm-12' : 'col-sm-5') + ' bx-soa-pp-desc-container',
+			// 		},
+			// 	}),
+			var innerPs, extPs, delimiter, currentPaySystem, logotype, logoNode, subTitle, label, title, price;
 
-			BX.cleanNode(paySystemInfoContainer);
+			// BX.cleanNode(paySystemInfoContainer);
 
-			if (this.result.PAY_FROM_ACCOUNT == 'Y') innerPs = this.getInnerPaySystem(paySystemInfoContainer);
+			// if (this.result.PAY_FROM_ACCOUNT == 'Y') innerPs = this.getInnerPaySystem(paySystemInfoContainer);
 
 			currentPaySystem = this.getSelectedPaySystem();
 			if (currentPaySystem) {
@@ -4764,13 +4759,13 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			if (innerPs && extPs) delimiter = BX.create('HR', { props: { className: 'bxe-light' } });
 
-			paySystemInfoContainer.appendChild(
-				BX.create('DIV', {
-					props: { className: 'bx-soa-pp-company' },
-					children: [innerPs, delimiter, extPs],
-				}),
-			);
-			paySystemNode.appendChild(paySystemInfoContainer);
+			// paySystemInfoContainer.appendChild(
+			// 	BX.create('DIV', {
+			// 		props: { className: 'bx-soa-pp-company' },
+			// 		children: [innerPs, delimiter, extPs],
+			// 	}),
+			// );
+			// paySystemNode.appendChild(paySystemInfoContainer);
 		},
 
 		getInnerPaySystem: function () {
@@ -6298,7 +6293,21 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				property,
 				groupIterator = this.propertyCollection.getGroupIterator(),
 				propsIterator;
-			var orderRadios = BX.create('DIV', {
+			var propsItemsWrapper = BX.create('DIV', {
+				props: { className: 'bx-soa-customer__wrapper' },
+			});
+
+			this.changeUserData = BX.create('BUTTON', {
+				props: {
+					className: 'change-field change__recipient__btn-none-modal md:hidden bg-[#F2F3F5] text-[12px]',
+				},
+				attrs: {
+					type: 'button',
+				},
+				text: 'Изменить получателя',
+			});
+
+			const orderRadios = BX.create('DIV', {
 				props: { className: 'order__content-form' },
 				children: [
 					BX.create('LABEL', {
@@ -6340,12 +6349,41 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 					)
 						continue;
 
-					this.getPropertyRowNode(property, propsItemsContainer, false);
+					this.getPropertyRowNode(property, propsItemsWrapper, false);
 				}
 			}
-			propsItemsContainer.appendChild(orderRadios);
+			propsItemsWrapper.appendChild(this.changeUserData);
+
+			// собираем итоговую структуру
+			propsItemsContainer.appendChild(propsItemsWrapper); // wrapper внутрь контейнера
+			propsItemsContainer.appendChild(orderRadios); // radios тоже в контейнер
 
 			propsNode.appendChild(propsItemsContainer);
+
+			this.changeUserFields(propsItemsWrapper);
+		},
+
+		changeUserFields: function (propsWrapper) {
+			let inputs = propsWrapper.querySelectorAll('input[type=text]');
+
+			if (this.changeUserData) {
+				BX.bind(this.changeUserData, 'click', function (e) {
+					e.preventDefault();
+					e.stopPropagation();
+
+					for (let i = 0; i < inputs.length; i++) {
+						if (inputs[i].hasAttribute('disabled')) {
+							inputs[i].removeAttribute('disabled');
+							this.innerHTML = 'Cохранить';
+						} else {
+							inputs[i].setAttribute('disabled', '');
+							this.innerHTML = 'Изменить получателя';
+						}
+					}
+				});
+			} else {
+				console.error('Edit button is not declared');
+			}
 		},
 
 		getPropertyRowNode: function (property, propsItemsContainer, disabled) {
@@ -6704,6 +6742,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			if (textNode) {
 				textNode.id = 'soa-property-' + settings.ID;
+				textNode.setAttribute('disabled', true);
 				if (settings.IS_ADDRESS == 'Y') textNode.setAttribute('autocomplete', 'address');
 				if (settings.IS_EMAIL == 'Y') textNode.setAttribute('autocomplete', 'email');
 				if (settings.IS_PAYER == 'Y') textNode.setAttribute('autocomplete', 'name');

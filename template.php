@@ -5,6 +5,8 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 
 use Bitrix\Main;
 use Bitrix\Main\Localization\Loc;
+use Bitrix\Sale\Delivery\Services\Manager as DeliveryManager;
+use Bitrix\Main\Page\Asset;
 
 /**
  * @var array $arParams
@@ -293,6 +295,95 @@ if ((string)$request->get('ORDER_ID') !== '') {
 	Main\UI\Extension::load('phone_auth');
 
 	$hideDelivery = empty($arResult['DELIVERY']);
+
+	$deliveryTypeById = [];
+	$deliveries = $arResult['JS_DATA']['DELIVERY'] ?? $arResult['DELIVERY'] ?? [];
+
+	foreach ($deliveries as $delivery) {
+		$id = (int)$delivery['ID'];
+		$srv = DeliveryManager::getById($id);
+		if (!$srv) {
+			$deliveryTypeById[$id] = 'SERVICE_' . $id;
+			continue;
+		}
+
+		$typeKey =
+			($srv['CODE'] ?? '') ? $srv['CODE']
+			: (($srv['SID'] ?? '') ?: '');
+
+		if ($typeKey === '') {
+			$class = (string)($srv['CLASS_NAME'] ?? '');
+			if ($class !== '') {
+				$typeKey = preg_replace('/[^A-Za-z0-9_]/', '_', ltrim($class, '\\'));
+			}
+		}
+
+		if ($typeKey === '') {
+			if (!empty($srv['PARENT_ID'])) {
+				$parent = DeliveryManager::getById((int)$srv['PARENT_ID']);
+				if ($parent) {
+					$typeKey = ($parent['CODE'] ?? $parent['SID'] ?? 'PARENT') . '_ID' . $id;
+				}
+			}
+		}
+
+		if ($typeKey === '') {
+			$typeKey = 'SERVICE_' . $id;
+		}
+
+		$deliveryTypeById[$id] = $typeKey;
+	}
+
+	// s($arResult['JS_DATA']['ORDER_PROP']['properties']);
+
+	foreach ($arResult['JS_DATA']['ORDER_PROP']['properties'] as $property) {
+		// s($property);
+		// $property — это один элемент массива
+		$orderData[$property['CODE']] = [
+			'NAME' => $property['NAME'],
+			'VALUE' => $property['VALUE'][0]
+		];
+	}
+
+	global $USER;
+
+	$userId = $USER->GetId();
+
+	$arUserProfile = [];
+
+	$rsProfiles = CSaleOrderUserProps::GetList(
+		['DATE_UPDATE' => 'DESC'],
+		['USER_ID' => $userId],
+		false,
+		['nTopCount' => 1],
+		[]
+	);
+
+	if ($arProfile = $rsProfiles->GetNext()) {
+		if ($arProfile) {
+			$arUserProfile['ID'] = $arProfile['ID'];
+
+			$rsProps = CSaleOrderUserPropsValue::GetList(
+				['SORT' => 'ASC'],
+				['USER_PROPS_ID' => $arProfile['ID']]
+			);
+
+			$props = [];
+			while ($arProp = $rsProps->Fetch()) {
+				$arUserProfile['PROPS'][] = [
+					'ID' => $arProp['ID'],
+					'USER_PROPS_ID' => $arProp['USER_PROPS_ID'],
+					'ORDER_PROPS_ID' => $arProp['ORDER_PROPS_ID'],
+					'NAME' => $arProp['NAME'],
+					'VALUE' => $arProp['VALUE']
+				];
+			}
+		}
+	}
+
+	// s($arUserProfile);
+
+	// s($orderData);
 ?>
 	<form action="<?= POST_FORM_ACTION_URI ?>" method="POST" name="ORDER_FORM" id="bx-soa-order-form" enctype="multipart/form-data">
 		<?php
@@ -307,7 +398,7 @@ if ((string)$request->get('ORDER_ID') !== '') {
 		<input type="hidden" name="BUYER_STORE" id="BUYER_STORE" value="<?= $arResult['BUYER_STORE'] ?>">
 		<div id="bx-soa-order" class="row bx-<?= $arParams['TEMPLATE_THEME'] ?>" style="opacity: 0">
 			<!--	MAIN BLOCK	-->
-			<div class="col-sm-9 bx-soa">
+			<div class="col-sm-8 bx-soa">
 				<div id="bx-soa-main-notifications">
 					<div class="alert alert-danger" style="display:none"></div>
 					<div data-type="informer" style="display:none"></div>
@@ -474,9 +565,9 @@ if ((string)$request->get('ORDER_ID') !== '') {
 						}
 						?>
 					</div>
-					<a href="javascript:void(0)" style="margin: 10px 0" class="pull-right btn btn-default btn-lg hidden-xs" data-save-button="true">
+					<!-- <a href="javascript:void(0)" style="margin: 10px 0" class="pull-right btn btn-default btn-lg hidden-xs" data-save-button="true">
 						<?= $arParams['MESS_ORDER'] ?>
-					</a>
+					</a> -->
 				</div>
 
 				<div style="display: none;">
@@ -493,14 +584,25 @@ if ((string)$request->get('ORDER_ID') !== '') {
 			</div>
 
 			<!--	SIDEBAR BLOCK	-->
-			<div id="bx-soa-total" class="col-sm-3 bx-soa-sidebar">
+			<div id="bx-soa-total" class="col-sm-4 bx-soa-sidebar">
 				<div class="bx-soa-cart-total-ghost"></div>
 				<div class="bx-soa-cart-total"></div>
 			</div>
 		</div>
 	</form>
 
+	<div id="change-recipient-modal" class="modal__change-recipient" aria-hidden="true"></div>
+	<div id="map-modal" class="modal__change-recipient" aria-hidden="true">
+		<button class="modal__close" type='button' aria-label="Закрыть карту">
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+				<path fill-rule="evenodd" clip-rule="evenodd" d="M12 1C5.92487 1 1 5.92487 1 12C1 18.0751 5.92487 23 12 23C18.0751 23 23 18.0751 23 12C23 5.92487 18.0751 1 12 1ZM15.7071 9.70711C16.0976 9.31658 16.0976 8.68342 15.7071 8.29289C15.3166 7.90237 14.6834 7.90237 14.2929 8.29289L12 10.5858L9.70711 8.29291C9.31658 7.90238 8.68342 7.90238 8.29289 8.29291C7.90237 8.68343 7.90237 9.3166 8.29289 9.70712L10.5858 12L8.2929 14.2929C7.90238 14.6834 7.90238 15.3166 8.2929 15.7071C8.68342 16.0976 9.31659 16.0976 9.70711 15.7071L12 13.4142L14.2929 15.7071C14.6834 16.0976 15.3166 16.0976 15.7071 15.7071C16.0976 15.3166 16.0976 14.6834 15.7071 14.2929L13.4142 12L15.7071 9.70711Z" fill="#fff"></path>
+			</svg>
+		</button>
+		<div id="courierMap" style="width: 800px; height: 600px"></div>
+	</div>
+
 	<div id="bx-soa-saved-files" style="display:none"></div>
+
 	<div id="bx-soa-soc-auth-services" style="display:none">
 		<?php
 		$arServices = false;
@@ -555,6 +657,7 @@ if ((string)$request->get('ORDER_ID') !== '') {
 	$signer = new Main\Security\Sign\Signer;
 	$signedParams = $signer->sign(base64_encode(serialize($arParams)), 'sale.order.ajax');
 	$messages = Loc::loadLanguageFile(__FILE__);
+
 	?>
 	<script>
 		BX.message(<?= CUtil::PhpToJSObject($messages) ?>);
@@ -565,7 +668,10 @@ if ((string)$request->get('ORDER_ID') !== '') {
 			signedParamsString: '<?= CUtil::JSEscape($signedParams) ?>',
 			siteID: '<?= CUtil::JSEscape($component->getSiteId()) ?>',
 			ajaxUrl: '<?= CUtil::JSEscape($component->getPath() . '/ajax.php') ?>',
+			orderData: <?= CUtil::PhpToJSObject($orderData, false, true) ?>,
+			userProfile: <?= CUtil::PhpToJSObject($arUserProfile, false, true) ?>,
 			templateFolder: '<?= CUtil::JSEscape($templateFolder) ?>',
+			deliveryTypeById: <?= CUtil::PhpToJSObject($deliveryTypeById, false, true)  ?>,
 			propertyValidation: true,
 			showWarnings: true,
 			pickUpMap: {
@@ -609,40 +715,46 @@ if ((string)$request->get('ORDER_ID') !== '') {
 			],
 		]);
 		?>
-		BX.saleOrderAjax.init(<?= CUtil::PhpToJSObject([
-									'source' => $component->getPath() . '/get.php',
-									'cityTypeId' => (int)($city['ID'] ?? 0),
-									'messages' => [
-										'otherLocation' => '--- ' . Loc::getMessage('SOA_OTHER_LOCATION'),
-										'moreInfoLocation' => '--- ' . Loc::getMessage('SOA_NOT_SELECTED_ALT'), // spike: for children of cities we place this prompt
-										'notFoundPrompt' =>
-										'<div class="-bx-popup-special-prompt">'
-											. Loc::getMessage('SOA_LOCATION_NOT_FOUND') . '.<br />'
-											. Loc::getMessage(
-												'SOA_LOCATION_NOT_FOUND_PROMPT',
-												[
-													'#ANCHOR#' => '<a href="javascript:void(0)" class="-bx-popup-set-mode-add-loc">',
-													'#ANCHOR_END#' => '</a>',
-												]
-											)
-											. '</div>',
-									],
-								]); ?>);
+		BX.saleOrderAjax.init(
+			<?= CUtil::PhpToJSObject([
+				'source' => $component->getPath() . '/get.php',
+				'cityTypeId' => (int)($city['ID'] ?? 0),
+				'messages' => [
+					'otherLocation' => '--- ' . Loc::getMessage('SOA_OTHER_LOCATION'),
+					'moreInfoLocation' => '--- ' . Loc::getMessage('SOA_NOT_SELECTED_ALT'), // spike: for children of cities we place this prompt
+					'notFoundPrompt' =>
+					'<div class="-bx-popup-special-prompt">'
+						. Loc::getMessage('SOA_LOCATION_NOT_FOUND') . '.<br />'
+						. Loc::getMessage(
+							'SOA_LOCATION_NOT_FOUND_PROMPT',
+							[
+								'#ANCHOR#' => '<a href="javascript:void(0)" class="-bx-popup-set-mode-add-loc">',
+								'#ANCHOR_END#' => '</a>',
+							]
+						)
+						. '</div>',
+				],
+			]); ?>);
 	</script>
+
 	<?php
 	if ($arParams['SHOW_PICKUP_MAP'] === 'Y' || $arParams['SHOW_MAP_IN_PROPS'] === 'Y') {
 		if ($arParams['PICKUP_MAP_TYPE'] === 'yandex') {
-			$this->addExternalJs($templateFolder . '/scripts/yandex_maps.js');
 			$apiKey = htmlspecialcharsbx(Main\Config\Option::get('fileman', 'yandex_map_api_key', ''));
+
+			Asset::getInstance()->addString(
+				"<script src='https://api-maps.yandex.ru/v3/?apikey=" . $apiKey . "&lang=ru_RU'></script>"
+			);
+			$this->addExternalJs($templateFolder . '/scripts/ya_maps.js');
+
 	?>
-			<script src="<?= $scheme ?>://api-maps.yandex.ru/2.1.50/?apikey=<?= $apiKey ?>&load=package.full&lang=<?= $locale ?>"></script>
 			<script>
-				(function bx_ymaps_waiter() {
-					if (typeof ymaps !== 'undefined' && BX.Sale && BX.Sale.OrderAjaxComponent)
-						ymaps.ready(BX.proxy(BX.Sale.OrderAjaxComponent.initMaps, BX.Sale.OrderAjaxComponent));
-					else
-						setTimeout(bx_ymaps_waiter, 100);
-				})();
+				(() => {
+					new YandexMap({
+						apiKey: '<?= CUtil::JSEscape($apiKey) ?>',
+						location: '<?= CUtil::JSEscape($orderData['ADDRESS']['VALUE']) ?>'
+					});
+				})()
 			</script>
 		<?php
 		}
@@ -685,3 +797,6 @@ if ((string)$request->get('ORDER_ID') !== '') {
 <?php
 	}
 }
+
+$this->addExternalJs($templateFolder . '/scripts/index_handler.min.js');
+?>

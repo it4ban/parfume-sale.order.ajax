@@ -61,6 +61,11 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			this.isHttps = window.location.protocol === 'https:';
 			this.orderSaveAllowed = false;
 			this.socServiceHiddenNode = false;
+			this.currentDeliveryOwner = '';
+			this.deliveryData = null;
+
+			this.customProperties = [];
+			this.customPropertiesHtml = [];
 		},
 
 		/**
@@ -80,6 +85,10 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			this.defaultStoreLogo = this.templateFolder + '/images/pickup_logo.png';
 			this.defaultDeliveryLogo = this.templateFolder + '/images/delivery_logo.png';
 			this.defaultPaySystemLogo = this.templateFolder + '/images/pay_system_logo.png';
+
+			this.deliveryTypeById = parameters.deliveryTypeById || {};
+			this.orderData = parameters.orderData || [];
+			this.userProfile = parameters.userProfile || [];
 
 			this.orderBlockNode = BX(parameters.orderBlockId);
 			this.totalBlockNode = BX(parameters.totalBlockId);
@@ -4553,6 +4562,15 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			// 	this.getBlockFooter(paySystemContent);
 			// }
 
+			const paySliderWrapper = BX.create('DIV', {
+				props: { className: 'order__pay-slider-wrapper' },
+			});
+
+			const paySliderNav = BX.create('DIV', {
+				props: { className: 'order__cart-slider-button swiper-button-next' },
+				html: '<svg width="18" height="13" viewBox="0 0 18 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M0.41399 6.65671C0.41399 6.42348 0.506637 6.19981 0.671551 6.0349C0.836465 5.86998 1.06014 5.77734 1.29336 5.77734L14.4728 5.77734L10.6968 2.00308C10.5317 1.83795 10.4389 1.614 10.4389 1.38048C10.4389 1.14696 10.5317 0.92301 10.6968 0.757887C10.8619 0.592765 11.0859 0.5 11.3194 0.5C11.5529 0.5 11.7769 0.592765 11.942 0.757887L17.2182 6.03411C17.3001 6.1158 17.3651 6.21284 17.4094 6.31967C17.4537 6.42651 17.4766 6.54104 17.4766 6.65671C17.4766 6.77237 17.4537 6.88691 17.4094 6.99374C17.3651 7.10058 17.3001 7.19762 17.2182 7.2793L11.942 12.5555C11.7769 12.7206 11.5529 12.8134 11.3194 12.8134C11.0859 12.8134 10.8619 12.7206 10.6968 12.5555C10.5317 12.3904 10.4389 12.1665 10.4389 11.9329C10.4389 11.6994 10.5317 11.4755 10.6968 11.3103L14.4728 7.53608L1.29336 7.53608C1.06014 7.53608 0.836465 7.44343 0.671551 7.27852C0.506637 7.1136 0.41399 6.88993 0.41399 6.65671Z" fill="#090B18"></path></svg>',
+			});
+
 			var node = this.paySystemBlockNode, // всегда берём только видимый
 				paySystemContent = node.querySelector('.bx-soa-section-content'),
 				paySystemNode;
@@ -4565,9 +4583,10 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 
 			this.getErrorContainer(paySystemContent);
-			paySystemNode = BX.create('DIV', { props: { className: 'bx-soa-pp row' } });
+			paySystemNode = BX.create('DIV', { props: { className: 'bx-soa-pp swiper order__pay-slider' } });
 			this.editPaySystemItems(paySystemNode);
-			paySystemContent.appendChild(paySystemNode);
+			// paySystemContent.appendChild(paySystemNode);
+			// paySystemContent.appendChild(paySliderNav);
 			this.editPaySystemInfo(paySystemNode);
 
 			if (this.params.SHOW_COUPONS_PAY_SYSTEM == 'Y') {
@@ -4575,6 +4594,16 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 
 			this.getBlockFooter(paySystemContent);
+
+			paySliderWrapper.appendChild(paySystemNode);
+			paySliderWrapper.appendChild(paySliderNav);
+			paySystemContent.appendChild(paySliderWrapper);
+
+			this.initSlider('.order__pay-slider', {
+				direction: 'horizontal',
+				loop: true,
+				spaceBetween: 20,
+			});
 		},
 
 		editFadePaySystemBlock: function () {
@@ -4599,7 +4628,9 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 		editPaySystemItems: function (paySystemNode) {
 			if (!this.result.PAY_SYSTEM || this.result.PAY_SYSTEM.length <= 0) return;
 
-			var paySystemItemsContainer = BX.create('DIV', { props: { className: 'col-sm-12 bx-soa-pp-item-container' } }),
+			var paySystemItemsContainer = BX.create('DIV', {
+					props: { className: 'bx-soa-pp-item-container swiper-wrapper' },
+				}),
 				paySystemItemNode,
 				i;
 
@@ -4640,8 +4671,13 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				logotype = (logotype && logotype.src_1x) || this.defaultPaySystemLogo;
 				logoNode.setAttribute('style', 'background-image: url("' + logotype + '");');
 			}
+
+			if (this.params.SHOW_PAY_SYSTEM_LIST_NAMES == 'Y') {
+				title = BX.create('DIV', { props: { className: 'bx-soa-pp-company-smalltitle' }, text: item.NAME });
+			}
+
 			label = BX.create('DIV', {
-				props: { className: 'bx-soa-pp-company-graf-container' },
+				props: { className: 'bx-soa-pp-company-graf-container pay-slide' },
 				children: [
 					BX.create('INPUT', {
 						props: {
@@ -4654,16 +4690,13 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 						},
 					}),
 					logoNode,
+					title,
 				],
 			});
 
-			if (this.params.SHOW_PAY_SYSTEM_LIST_NAMES == 'Y') {
-				title = BX.create('DIV', { props: { className: 'bx-soa-pp-company-smalltitle' }, text: item.NAME });
-			}
-
 			itemNode = BX.create('DIV', {
-				props: { className: 'bx-soa-pp-company col-lg-4 col-sm-4 col-xs-6' },
-				children: [label, title],
+				props: { className: 'bx-soa-pp-company bx-soa-pp-pay swiper-slide' },
+				children: [label],
 				events: {
 					click: BX.proxy(this.selectPaySystem, this),
 				},
@@ -5042,7 +5075,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 		editDeliveryItems: function (deliveryNode) {
 			if (!this.result.DELIVERY || this.result.DELIVERY.length <= 0) return;
 
-			var deliveryItemsContainer = BX.create('DIV', { props: { className: 'col-sm-7 bx-soa-pp-item-container' } }),
+			var deliveryItemsContainer = BX.create('DIV', { props: { className: 'col-sm-12 bx-soa-pp-item-container' } }),
 				deliveryItemNode,
 				k;
 
@@ -5080,20 +5113,20 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			logoNode = BX.create('DIV', { props: { className: 'bx-soa-pp-company-image' } });
 			logotype = this.getImageSources(currentDelivery, 'LOGOTIP');
 			if (logotype && logotype.src_2x) {
-				logoNode.setAttribute(
-					'style',
-					'background-image: url("' +
-						logotype.src_1x +
-						'");' +
-						'background-image: -webkit-image-set(url("' +
-						logotype.src_1x +
-						'") 1x, url("' +
-						logotype.src_2x +
-						'") 2x)',
-				);
+				// logoNode.setAttribute(
+				// 	'style',
+				// 	'background-image: url("' +
+				// 		logotype.src_1x +
+				// 		'");' +
+				// 		'background-image: -webkit-image-set(url("' +
+				// 		logotype.src_1x +
+				// 		'") 1x, url("' +
+				// 		logotype.src_2x +
+				// 		'") 2x)',
+				// );
 			} else {
 				logotype = (logotype && logotype.src_1x) || this.defaultDeliveryLogo;
-				logoNode.setAttribute('style', 'background-image: url("' + logotype + '");');
+				// logoNode.setAttribute('style', 'background-image: url("' + logotype + '");');
 			}
 
 			name = this.params.SHOW_DELIVERY_PARENT_NAMES != 'N' ? currentDelivery.NAME : currentDelivery.OWN_NAME;
@@ -5110,6 +5143,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 					}),
 				],
 			});
+
 			title = BX.create('DIV', {
 				props: { className: 'bx-soa-pp-company-block' },
 				children: [
@@ -5161,10 +5195,42 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			deliveryInfoContainer.appendChild(
 				BX.create('DIV', {
 					props: { className: 'bx-soa-pp-company' },
-					children: [subTitle, label, title, clear, extraServicesNode, infoList],
+					children: [subTitle, title, clear, extraServicesNode, infoList],
 				}),
 			);
 			deliveryNode.appendChild(deliveryInfoContainer);
+
+			var addressData = {
+				input: BX.create('INPUT', {
+					props: {
+						className: 'md-input',
+					},
+					attrs: {
+						type: 'text',
+						placeholder: 'Адрес не выбран',
+						disabled: 'true',
+						value: this.orderData.ADDRESS.VALUE,
+					},
+				}),
+				button: BX.create('BUTTON', {
+					props: {
+						className: 'address-button change__recipient__btn',
+					},
+					attrs: {
+						type: 'button',
+					},
+					text: 'Добавить адрес',
+				}),
+			};
+
+			switch (this.deliveryData.type) {
+				case 'courier:simple':
+					this.handleCourierItem(addressData);
+					break;
+				case 'courier:pickup':
+					this.handlePVZItem(this.deliveryData.item);
+					break;
+			}
 
 			if (this.params.DELIVERY_NO_AJAX != 'Y') this.deliveryCachedInfo[currentDelivery.ID] = currentDelivery;
 		},
@@ -5301,46 +5367,46 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			logoNode = BX.create('DIV', { props: { className: 'bx-soa-pp-company-image' } });
 			logotype = this.getImageSources(item, 'LOGOTIP');
 			if (logotype && logotype.src_2x) {
-				logoNode.setAttribute(
-					'style',
-					'background-image: url("' +
-						logotype.src_1x +
-						'");' +
-						'background-image: -webkit-image-set(url("' +
-						logotype.src_1x +
-						'") 1x, url("' +
-						logotype.src_2x +
-						'") 2x)',
-				);
+				// logoNode.setAttribute(
+				// 	'style',
+				// 	'background-image: url("' +
+				// 		logotype.src_1x +
+				// 		'");' +
+				// 		'background-image: -webkit-image-set(url("' +
+				// 		logotype.src_1x +
+				// 		'") 1x, url("' +
+				// 		logotype.src_2x +
+				// 		'") 2x)',
+				// );
 			} else {
 				logotype = (logotype && logotype.src_1x) || this.defaultDeliveryLogo;
 				logoNode.setAttribute('style', 'background-image: url("' + logotype + '");');
 			}
-			labelNodes.push(logoNode);
+			// labelNodes.push(logoNode);
 
 			if (item.PRICE >= 0 || typeof item.DELIVERY_DISCOUNT_PRICE !== 'undefined') {
-				labelNodes.push(
-					BX.create('DIV', {
-						props: { className: 'bx-soa-pp-delivery-cost' },
-						html:
-							typeof item.DELIVERY_DISCOUNT_PRICE !== 'undefined'
-								? item.DELIVERY_DISCOUNT_PRICE_FORMATED
-								: item.PRICE_FORMATED,
-					}),
-				);
+				// labelNodes.push(
+				// 	BX.create('DIV', {
+				// 		props: { className: 'bx-soa-pp-delivery-cost' },
+				// 		html:
+				// 			typeof item.DELIVERY_DISCOUNT_PRICE !== 'undefined'
+				// 				? item.DELIVERY_DISCOUNT_PRICE_FORMATED
+				// 				: item.PRICE_FORMATED,
+				// 	}),
+				// );
 			} else if (
 				deliveryCached &&
 				(deliveryCached.PRICE >= 0 || typeof deliveryCached.DELIVERY_DISCOUNT_PRICE !== 'undefined')
 			) {
-				labelNodes.push(
-					BX.create('DIV', {
-						props: { className: 'bx-soa-pp-delivery-cost' },
-						html:
-							typeof deliveryCached.DELIVERY_DISCOUNT_PRICE !== 'undefined'
-								? deliveryCached.DELIVERY_DISCOUNT_PRICE_FORMATED
-								: deliveryCached.PRICE_FORMATED,
-					}),
-				);
+				// labelNodes.push(
+				// 	BX.create('DIV', {
+				// 		props: { className: 'bx-soa-pp-delivery-cost' },
+				// 		html:
+				// 			typeof deliveryCached.DELIVERY_DISCOUNT_PRICE !== 'undefined'
+				// 				? deliveryCached.DELIVERY_DISCOUNT_PRICE_FORMATED
+				// 				: deliveryCached.PRICE_FORMATED,
+				// 	}),
+				// );
 			}
 
 			label = BX.create('DIV', {
@@ -5360,7 +5426,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 
 			itemNode = BX.create('DIV', {
-				props: { className: 'bx-soa-pp-company col-lg-4 col-sm-4 col-xs-6' },
+				props: { className: 'bx-soa-pp-company col-lg-12 col-sm-12 col-xs-12' },
 				children: [label, title],
 				events: { click: BX.proxy(this.selectDelivery, this) },
 			});
@@ -5368,8 +5434,715 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			if (checked && this.result.LAST_ORDER_DATA.PICK_UP) this.lastSelectedDelivery = deliveryId;
 
+			if (item.CHECKED == 'Y') {
+				this.handleSelectDelivery(item.ID, item);
+			}
+
 			return itemNode;
 		},
+
+		handleSelectDelivery: function (deliveryId, item) {
+			var typeKey = this.deliveryTypeById[deliveryId] || 'SERVICE_' + deliveryId;
+
+			this.deliveryData = {
+				item: item,
+				type: typeKey,
+			};
+		},
+
+		fillProductSlider: function (itemContainer) {
+			if (!itemContainer) return;
+
+			var sliderEl = BX.findChild(itemContainer, { className: 'order__cart-slider' }, true);
+			if (!sliderEl) return;
+
+			BX.addClass(sliderEl, 'swiper');
+
+			var wrapper = BX.findChild(sliderEl, { className: 'swiper-wrapper' }, true);
+			if (!wrapper) {
+				wrapper = BX.create('DIV', { props: { className: 'swiper-wrapper' } });
+				sliderEl.appendChild(wrapper);
+			}
+
+			BX.cleanNode(wrapper);
+
+			var rowsObj = this.result.GRID && this.result.GRID.ROWS ? this.result.GRID.ROWS : null;
+			var rows = rowsObj ? Object.values(rowsObj) : [];
+
+			var fallbackImg = '/local/templates/mains/assets/images/order/t1.png';
+
+			for (var i = 0; i < rows.length; i++) {
+				var data = rows[i].data || rows[i];
+
+				var href = data.DETAIL_PAGE_URL || '#';
+				var img = data.PREVIEW_PICTURE_SRC || data.DETAIL_PICTURE_SRC || fallbackImg;
+				var name = data.NAME || '';
+
+				var slide = BX.create('LI', {
+					props: { className: 'order__accordion-products-item swiper-slide' },
+					children: [
+						BX.create('A', {
+							attrs: { href: href },
+							children: [BX.create('IMG', { attrs: { src: img, alt: name } })],
+						}),
+					],
+				});
+
+				wrapper.appendChild(slide);
+			}
+
+			if (!rows.length) {
+				BX.hide(sliderEl);
+			} else {
+				BX.show(sliderEl);
+			}
+		},
+
+		initSlider: function (selector, baseParams) {
+			document.querySelectorAll(selector).forEach((sliderEl) => {
+				if (!sliderEl.classList.contains('swiper')) {
+					sliderEl.classList.add('swiper');
+				}
+
+				const wrapper = sliderEl.querySelector('.swiper-wrapper');
+				const slides = wrapper ? wrapper.querySelectorAll('.swiper-slide') : [];
+				const slidesCount = slides.length;
+
+				if (slidesCount === 0) return;
+
+				const calcSlidesPerView = (want) => {
+					if (want === 'auto') return 'auto';
+					return Math.min(want, Math.max(1, slidesCount));
+				};
+
+				const desired = {
+					default: 4,
+					768: 3,
+					569: 3,
+					481: 2,
+					280: 'auto',
+				};
+
+				const enableLoop = slidesCount > 4;
+
+				const params = Object.assign({}, baseParams, {
+					slidesPerView: calcSlidesPerView(desired.default),
+					spaceBetween: baseParams.spaceBetween || 20,
+					loop: enableLoop,
+					watchOverflow: true,
+					navigation: {
+						nextEl: sliderEl.parentElement.querySelector('.swiper-button-next'),
+					},
+					breakpoints: {
+						769: { slidesPerView: calcSlidesPerView(desired.default), spaceBetween: 20 },
+						768: { slidesPerView: calcSlidesPerView(desired[768]), spaceBetween: 20 },
+						569: { slidesPerView: calcSlidesPerView(desired[569]), spaceBetween: 20 },
+						481: { slidesPerView: calcSlidesPerView(desired[481]), spaceBetween: 15 },
+						280: { slidesPerView: calcSlidesPerView(desired[280]), spaceBetween: 10 },
+					},
+				});
+
+				return new Swiper(sliderEl, params);
+			});
+		},
+
+		handleCourierItem: function (addressData) {
+			let itemContainer = document.querySelector('.bx-soa-pp-desc-container .bx-soa-pp-company');
+			if (itemContainer) {
+				let sliderBlock = BX.create('DIV', {
+					props: { className: 'order__cart-slider-parent' },
+					children: [
+						BX.create('DIV', {
+							props: { className: 'order__cart-slider' },
+							children: [
+								BX.create('DIV', {
+									props: { className: 'swiper-wrapper' },
+								}),
+							],
+						}),
+						BX.create('div', {
+							props: { className: 'order__cart-slider-button swiper-button-next' },
+							html: '<svg width="18" height="13" viewBox="0 0 18 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M0.41399 6.65671C0.41399 6.42348 0.506637 6.19981 0.671551 6.0349C0.836465 5.86998 1.06014 5.77734 1.29336 5.77734L14.4728 5.77734L10.6968 2.00308C10.5317 1.83795 10.4389 1.614 10.4389 1.38048C10.4389 1.14696 10.5317 0.92301 10.6968 0.757887C10.8619 0.592765 11.0859 0.5 11.3194 0.5C11.5529 0.5 11.7769 0.592765 11.942 0.757887L17.2182 6.03411C17.3001 6.1158 17.3651 6.21284 17.4094 6.31967C17.4537 6.42651 17.4766 6.54104 17.4766 6.65671C17.4766 6.77237 17.4537 6.88691 17.4094 6.99374C17.3651 7.10058 17.3001 7.19762 17.2182 7.2793L11.942 12.5555C11.7769 12.7206 11.5529 12.8134 11.3194 12.8134C11.0859 12.8134 10.8619 12.7206 10.6968 12.5555C10.5317 12.3904 10.4389 12.1665 10.4389 11.9329C10.4389 11.6994 10.5317 11.4755 10.6968 11.3103L14.4728 7.53608L1.29336 7.53608C1.06014 7.53608 0.836465 7.44343 0.671551 7.27852C0.506637 7.1136 0.41399 6.88993 0.41399 6.65671Z" fill="#090B18"></path></svg>',
+						}),
+					],
+				});
+				let colorCalendarNode = BX.create('DIV', {
+					props: { id: 'calendar', className: 'color-calendar' },
+				});
+
+				let calendar = this.initCalendar();
+				let weakTime = this.initWeakTime();
+				let weakendTime = this.initWeakendTime();
+
+				let subTitle = itemContainer.querySelector('.bx-soa-pp-company-subTitle');
+				if (subTitle) {
+					BX.insertAfter(addressData.input, subTitle);
+					BX.insertAfter(addressData.button, addressData.input);
+					BX.insertAfter(sliderBlock, addressData.button);
+
+					this.fillProductSlider(itemContainer);
+					this.initSlider('.order__cart-slider', {
+						direction: 'horizontal',
+						loop: true,
+						spaceBetween: 20,
+					});
+
+					BX.insertAfter(calendar, document.querySelector('.order__cart-slider-parent'));
+					BX.insertAfter(colorCalendarNode, calendar);
+					BX.insertAfter(weakTime, colorCalendarNode);
+					BX.insertAfter(weakendTime, weakTime);
+				} else {
+					itemContainer.insertBefore(addressData.input, itemContainer.firstChild);
+					BX.insertAfter(addressData.button, addressData.input);
+					BX.insertAfter(sliderBlock, addressData.button);
+
+					this.fillProductSlider(itemContainer);
+					this.initSlider('.order__cart-slider', {
+						direction: 'horizontal',
+						loop: true,
+						spaceBetween: 20,
+					});
+
+					BX.insertAfter(calendar, document.querySelector('.order__cart-slider-parent'));
+					BX.insertAfter(colorCalendarNode, calendar);
+					BX.insertAfter(weakTime, colorCalendarNode);
+					BX.insertAfter(weakendTime, weakTime);
+				}
+
+				this.handleCourierAddres();
+			} else {
+				console.error('Failed to initialize shipping container');
+			}
+		},
+
+		handleCourierAddres: function () {
+			this.initAddresPopup();
+
+			BX.bind(document.querySelector('.address-button'), 'click', (e) =>
+				this.handleOpenPopup(e, 'change-recipient-modal'),
+			);
+			BX.bind(document.querySelector('.modal__close'), 'click', (e) =>
+				this.handleClosePopup(e, 'change-recipient-modal'),
+			);
+		},
+
+		handleOpenPopup: function (e, modalId) {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const modal = BX(modalId);
+			if (!modal) return;
+
+			BX.addClass(modal, 'is-open');
+			modal.setAttribute('aria-hidden', 'false');
+
+			const closeButton = modal.querySelector('.modal__close');
+			if (closeButton) {
+				BX.bind(closeButton, 'click', (e) => this.handleClosePopup(e, modalId));
+			}
+
+			const overlay = modal.querySelector('.modal__overlay');
+			if (overlay) {
+				BX.bind(overlay, 'click', (e) => this.handleClosePopup(e, modalId));
+			}
+		},
+
+		handleClosePopup: function (e, modalId) {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const modal = BX(modalId);
+			if (!modal) return;
+
+			BX.removeClass(modal, 'is-open');
+			modal.setAttribute('aria-hidden', 'true');
+		},
+
+		initDayWeaks: function () {
+			let daysOfWeak = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+			let today = new Date();
+
+			let dayLabels = [];
+			for (let i = 0; i < daysOfWeak.length; i++) {
+				let date = new Date(today);
+				date.setDate(today.getDate() + i);
+
+				let dayName = daysOfWeak[date.getDay()];
+				let dayNumber = date.getDate();
+
+				dayLabels.push(
+					BX.create('DIV', {
+						attrs: { className: `order__accordion-form-day-label ${i == 0 ? 'is-active' : ''}` },
+						children: [BX.create('p', { text: dayName }), BX.create('strong', { text: dayNumber.toString() })],
+					}),
+				);
+			}
+
+			return dayLabels;
+		},
+
+		initCalendar: function () {
+			let weakDays = this.initDayWeaks();
+
+			let calendar = BX.create('DIV', {
+				attrs: {
+					className: 'order__accordion-form-day',
+				},
+				children: [
+					...weakDays,
+					BX.create('button', {
+						attrs: {
+							className: 'order__accordion-form-day-button',
+							id: 'openCalendarBtn',
+							type: 'button',
+						},
+						html: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+												<path d="M18 4H6C3.79086 4 2 5.79086 2 8V18C2 20.2091 3.79086 22 6 22H18C20.2091 22 22 20.2091 22 18V8C22 5.79086 20.2091 4 18 4Z" stroke="#4789EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+												<path d="M8 2V6" stroke="#4789EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+												<path d="M16 2V6" stroke="#4789EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+												<path d="M2 10H22" stroke="#4789EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+										</svg>
+										`,
+					}),
+				],
+			});
+
+			return calendar;
+		},
+
+		initActualTime: function (times, isWeak, date) {
+			let now = new Date();
+			let currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+			let isWeekend = now.getDay() === 0 || now.getDay() === 6;
+
+			return times.map((slot) => {
+				let [start, end] = slot.split(' - ');
+				let [endH, endM] = end.split(':').map(Number);
+
+				let endMinutes = endH * 60 + endM;
+
+				let isPast = currentMinutes > endMinutes;
+
+				let isDisabledByDay = (isWeak && !isWeekend) || (!isWeak && isWeekend);
+
+				let finalDisabled = isPast || isDisabledByDay;
+
+				return BX.create('DIV', {
+					attrs: {
+						className: 'order__accordion-form-time-label' + (finalDisabled ? ' disabled' : ''),
+						...(finalDisabled ? { disabled: 'disabled' } : {}),
+					},
+					children: [BX.create('p', { text: slot })],
+				});
+			});
+		},
+
+		initWeakTime: function () {
+			let actualTimes = this.initActualTime(
+				['09:00 - 13:00', '13:00 - 16:00', '16:00 - 19:00', '19:00 - 21:00'],
+				false,
+			);
+
+			let weakTime = BX.create('div', {
+				attrs: {
+					className: 'order__accordion-form-time order__accordion-form-time--weak',
+				},
+				children: [BX.create('h5', { text: 'Будни:' }), ...actualTimes],
+			});
+
+			return weakTime;
+		},
+
+		initWeakendTime: function () {
+			let actualTimes = this.initActualTime(['09:00 - 14:00', '14:00 - 18:00'], true);
+
+			let weakendTime = BX.create('DIV', {
+				attrs: {
+					action: '',
+					className: 'order__accordion-form-time order__accordion-form-time--weakend',
+				},
+				children: [BX.create('h5', { text: 'Выходные:' }), ...actualTimes],
+			});
+
+			return weakendTime;
+		},
+
+		fillPropsPopup: function (container) {
+			const columnFields = [116, 117, 118, 119];
+
+			// const citySelect = this.handleCitySelect();
+			const mapSelect = this.handleMapSelect();
+
+			let tempRow = null;
+
+			this.customPropertiesHtml.forEach((item, index) => {
+				if (!BX.type.isDomNode(item)) return;
+
+				const rowId = parseInt(item.getAttribute('data-property-id-row'));
+
+				if (columnFields.includes(rowId)) {
+					if (!tempRow) {
+						tempRow = document.createElement('div');
+						tempRow.className = 'modal-row';
+					}
+
+					const fieldWrapper = document.createElement('div');
+					fieldWrapper.className = 'modal-field';
+					fieldWrapper.appendChild(item);
+					tempRow.appendChild(fieldWrapper);
+
+					if (tempRow.children.length === 2) {
+						BX.append(tempRow, container);
+						tempRow = null;
+					}
+				} else {
+					const wrapper = document.createElement('div');
+					wrapper.className = 'modal-row';
+					wrapper.appendChild(item);
+					BX.append(wrapper, container);
+				}
+
+				if (index === 0) {
+					const mapRow = document.createElement('div');
+					mapRow.className = 'modal-row';
+					mapRow.appendChild(mapSelect);
+					BX.append(mapRow, container);
+				}
+			});
+
+			if (tempRow && tempRow.children.length > 0) {
+				BX.append(tempRow, container);
+			}
+		},
+
+		initAddresPopup: function () {
+			let modalRoot = BX('change-recipient-modal');
+
+			if (!modalRoot.querySelector('.modal__overlay')) {
+				let overlay = BX.create('DIV', {
+					props: { className: 'modal__overlay' },
+				});
+				BX.append(overlay, modalRoot);
+			}
+
+			if (!modalRoot.querySelector('.modal__dialog')) {
+				let closeButton = BX.create('BUTTON', {
+					props: { className: 'modal__close' },
+					attrs: {
+						type: 'button',
+						'aria-label': 'Закрыть',
+					},
+					html: `
+           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path fill-rule="evenodd" clip-rule="evenodd" d="M12 1C5.92487 1 1 5.92487 1 12C1 18.0751 5.92487 23 12 23C18.0751 23 23 18.0751 23 12C23 5.92487 18.0751 1 12 1ZM15.7071 9.70711C16.0976 9.31658 16.0976 8.68342 15.7071 8.29289C15.3166 7.90237 14.6834 7.90237 14.2929 8.29289L12 10.5858L9.70711 8.29291C9.31658 7.90238 8.68342 7.90238 8.29289 8.29291C7.90237 8.68343 7.90237 9.3166 8.29289 9.70712L10.5858 12L8.2929 14.2929C7.90238 14.6834 7.90238 15.3166 8.2929 15.7071C8.68342 16.0976 9.31659 16.0976 9.70711 15.7071L12 13.4142L14.2929 15.7071C14.6834 16.0976 15.3166 16.0976 15.7071 15.7071C16.0976 15.3166 16.0976 14.6834 15.7071 14.2929L13.4142 12L15.7071 9.70711Z" fill="#090B18"></path>
+				</svg>
+        `,
+				});
+
+				let popupContainer = BX.create('FORM', {
+					props: { className: 'modal__dialog' },
+					attrs: {
+						action: '/ajax/order_save_handler.php',
+						role: 'dialog',
+						'aria-modal': 'true',
+						'aria-labelledby': 'change-recipient-title',
+					},
+					children: [
+						closeButton,
+						BX.create('H2', {
+							props: {
+								id: 'change-recipient-title',
+								className: 'modal__title',
+							},
+							text: 'Адрес доставки',
+						}),
+
+						BX.create('DIV', {
+							props: {
+								className: 'modal-errors',
+							},
+						}),
+
+						// citySelect,
+
+						// BX.create('DIV', {
+						// 	props: { className: 'modal-field' },
+						// 	children: [
+						// 		BX.create('LABEL', {
+						// 			attrs: { for: 'populated-area' },
+						// 			props: { className: 'modal-label' },
+						// 			html: 'Населенный пункт <span class="required">*</span>',
+						// 		}),
+						// 		BX.create('INPUT', {
+						// 			attrs: {
+						// 				id: 'populated-area',
+						// 				type: 'text',
+						// 				placeholder: 'Улица, дом',
+						// 				value: this.orderData.ADDRESS.VALUE,
+						// 			},
+						// 			props: { className: 'modal-input' },
+						// 		}),
+						// 		BX.create('UL', {
+						// 			attrs: {
+						// 				id: 'populated-area-suggestions',
+						// 			},
+						// 			props: { className: 'suggestions-list' },
+						// 		}),
+						// 	],
+						// }),
+
+						// mapSelect,
+
+						// BX.create('DIV', {
+						// 	props: { className: 'modal-field' },
+						// 	children: [
+						// 		BX.create('LABEL', {
+						// 			attrs: { for: 'street' },
+						// 			props: { className: 'modal-label' },
+						// 			html: 'Улица, дом <span class="required">*</span>',
+						// 		}),
+						// 		BX.create('INPUT', {
+						// 			attrs: { id: 'street', type: 'text', placeholder: 'Улица, дом' },
+						// 			props: { className: 'modal-input' },
+						// 		}),
+						// 		BX.create('UL', {
+						// 			attrs: {
+						// 				id: 'street-suggestions',
+						// 			},
+						// 			props: { className: 'suggestions-list' },
+						// 		}),
+						// 	],
+						// }),
+
+						// ряд инпутов: кв, офис + подъезд
+						// BX.create('DIV', {
+						// 	props: { className: 'modal-row' },
+						// 	children: [
+						// 		BX.create('DIV', {
+						// 			props: { className: 'modal-field' },
+						// 			children: [
+						// 				BX.create('LABEL', {
+						// 					attrs: { for: 'flat' },
+						// 					props: { className: 'modal-label' },
+						// 					html: 'Кв, офис <span class="required">*</span>',
+						// 				}),
+						// 				BX.create('INPUT', {
+						// 					attrs: { id: 'flat', type: 'text', placeholder: 'Квартира/офис' },
+						// 					props: { className: 'modal-input' },
+						// 				}),
+						// 			],
+						// 		}),
+						// 		BX.create('DIV', {
+						// 			props: { className: 'modal-field' },
+						// 			children: [
+						// 				BX.create('LABEL', {
+						// 					attrs: { for: 'entrance' },
+						// 					props: { className: 'modal-label' },
+						// 					html: 'Подъезд <span class="required">*</span>',
+						// 				}),
+						// 				BX.create('INPUT', {
+						// 					attrs: { id: 'entrance', type: 'number', placeholder: 'Подъезд' },
+						// 					props: { className: 'modal-input' },
+						// 				}),
+						// 			],
+						// 		}),
+						// 	],
+						// }),
+
+						// ряд инпутов: этаж + домофон
+						// BX.create('DIV', {
+						// 	props: { className: 'modal-row' },
+						// 	children: [
+						// 		BX.create('DIV', {
+						// 			props: { className: 'modal-field' },
+						// 			children: [
+						// 				BX.create('LABEL', {
+						// 					attrs: { for: 'floor' },
+						// 					props: { className: 'modal-label' },
+						// 					text: 'Этаж',
+						// 				}),
+						// 				BX.create('INPUT', {
+						// 					attrs: { id: 'floor', type: 'number', placeholder: 'Этаж' },
+						// 					props: { className: 'modal-input' },
+						// 				}),
+						// 			],
+						// 		}),
+						// 		BX.create('DIV', {
+						// 			props: { className: 'modal-field' },
+						// 			children: [
+						// 				BX.create('LABEL', {
+						// 					attrs: { for: 'intercom' },
+						// 					props: { className: 'modal-label' },
+						// 					text: 'Домофон',
+						// 				}),
+						// 				BX.create('INPUT', {
+						// 					attrs: { id: 'intercom', type: 'text', placeholder: 'Домофон' },
+						// 					props: { className: 'modal-input' },
+						// 				}),
+						// 			],
+						// 		}),
+						// 	],
+						// }),
+
+						// textarea
+						// BX.create('DIV', {
+						// 	props: { className: 'modal-field' },
+						// 	children: [
+						// 		BX.create('LABEL', {
+						// 			attrs: { for: 'comment' },
+						// 			props: { className: 'modal-label' },
+						// 			text: 'Комментарии курьеру',
+						// 		}),
+						// 		BX.create('TEXTAREA', {
+						// 			attrs: { id: 'comment', placeholder: 'Впишите текст' },
+						// 			props: { className: 'modal-textarea-input' },
+						// 		}),
+						// 	],
+						// }),
+
+						// кнопки
+					],
+				});
+
+				this.fillPropsPopup(popupContainer);
+
+				BX.append(
+					BX.create('DIV', {
+						props: { className: 'modal-row' },
+						children: [
+							BX.create('BUTTON', {
+								attrs: {
+									type: 'button',
+								},
+								props: { className: 'modal-btn cancel' },
+								text: 'Отменить',
+							}),
+							BX.create('BUTTON', {
+								attrs: {
+									type: 'submit',
+								},
+								props: { className: 'modal-btn save' },
+								text: 'Сохранить адрес',
+							}),
+						],
+					}),
+					popupContainer,
+				);
+				BX.append(popupContainer, modalRoot);
+
+				BX.bind(document.querySelector('.modal-btn.cancel'), 'click', (e) =>
+					this.handleClosePopup(e, 'change-recipient-modal'),
+				);
+				BX.bind(document.querySelector('.modal-btn.save'), 'click', (e) => this.handleOrderSave(e));
+			}
+		},
+
+		handleOrderSave: async function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const deliveryForm = document.querySelector('.modal__dialog');
+
+			try {
+				const data = new FormData(deliveryForm);
+				data.append('userProfile', JSON.stringify(this.userProfile));
+
+				const response = await fetch('/ajax/order_save_handler.php', {
+					method: 'POST',
+					body: data,
+				});
+
+				if (response.ok) {
+					console.log(await response.json());
+					this.handleClosePopup(e, 'change-recipient-modal');
+				} else {
+					console.error(`${response.status}: ${response.statusText}`);
+				}
+			} catch (error) {
+				console.error('Error in save order:', error);
+			}
+		},
+
+		handleCitySelect: function () {
+			const select = BX.create('DIV', {
+				props: { className: 'modal-field' },
+				children: [
+					BX.create('LABEL', {
+						attrs: { for: 'city-select' },
+						props: { className: 'modal-label' },
+						text: 'Населённый пункт',
+					}),
+					BX.create('DIV', {
+						props: { className: 'custom-select-wrapper' },
+						children: [
+							BX.create('DIV', {
+								props: { className: 'custom-select' },
+								text: 'Екатеринбург',
+								events: {
+									click: function () {
+										const wrapper = this.parentNode;
+										const options = BX.findChild(wrapper, { className: 'custom-select-options' }, true, false);
+										const icon = BX.findChild(wrapper, { className: 'custom-select-icon' }, true, false);
+										BX.toggleClass(this, 'open');
+										if (options) BX.toggleClass(options, 'open');
+										if (icon) BX.toggleClass(icon, 'rotate');
+									},
+								},
+							}),
+							BX.create('SPAN', {
+								props: { className: 'custom-select-icon' },
+								html: `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>`,
+							}),
+							BX.create('DIV', {
+								props: { className: 'custom-select-options' },
+								children: ['Екатеринбург', 'Москва', 'Санкт-Петербург'].map((city) =>
+									BX.create('DIV', {
+										props: { className: 'custom-option' },
+										text: city,
+										events: {
+											click: function () {
+												const wrapper = this.parentNode.parentNode; // .custom-select-wrapper
+												const select = BX.findChild(wrapper, { className: 'custom-select' }, true, false);
+												const options = BX.findChild(wrapper, { className: 'custom-select-options' }, true, false);
+												const icon = BX.findChild(wrapper, { className: 'custom-select-icon' }, true, false);
+
+												if (select) BX.html(select, city); // выбранный текст
+												if (select) BX.removeClass(select, 'open');
+												if (options) BX.removeClass(options, 'open');
+												if (icon) BX.removeClass(icon, 'rotate');
+											},
+										},
+									}),
+								),
+							}),
+						],
+					}),
+				],
+			});
+
+			return select;
+		},
+
+		handleMapSelect: function () {
+			const mapButton = BX.create('DIV', {
+				props: { className: 'modal-field' },
+				children: [
+					BX.create('BUTTON', {
+						attrs: { id: 'mapButton', type: 'button' },
+						props: { className: 'map-button' },
+						text: 'Указать на карте',
+					}),
+				],
+			});
+
+			BX.bind(mapButton, 'click', (e) => this.handleOpenPopup(e, 'map-modal'));
+			BX.bind(document.querySelector('.modal__close'), 'click', (e) => this.handleClosePopup(e, 'map-modal'));
+
+			return mapButton;
+		},
+
+		handlePVZItem: function (item) {},
 
 		editFadeDeliveryContent: function (node) {
 			var selectedDelivery = this.getSelectedDelivery(),
@@ -6352,12 +7125,15 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 					this.getPropertyRowNode(property, propsItemsWrapper, false);
 				}
 			}
+
+			if (this.customProperties.length > 0) {
+				this.insertCustomProperty();
+			}
+
 			propsItemsWrapper.appendChild(this.changeUserData);
 
-			// собираем итоговую структуру
-			propsItemsContainer.appendChild(propsItemsWrapper); // wrapper внутрь контейнера
-			propsItemsContainer.appendChild(orderRadios); // radios тоже в контейнер
-
+			propsItemsContainer.appendChild(propsItemsWrapper);
+			propsItemsContainer.appendChild(orderRadios);
 			propsNode.appendChild(propsItemsContainer);
 
 			this.changeUserFields(propsItemsWrapper);
@@ -6386,6 +7162,14 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 		},
 
+		setPropertyContainers: function (container, property, disabled) {
+			this.customProperties.push({
+				container: container,
+				property: property,
+				disabled: disabled,
+			});
+		},
+
 		getPropertyRowNode: function (property, propsItemsContainer, disabled) {
 			var propsItemNode = BX.create('DIV'),
 				textHtml = '',
@@ -6398,9 +7182,9 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			} else {
 				BX.addClass(propsItemNode, 'form-group bx-soa-customer-field');
 
-				if (property.isRequired()) textHtml += '<span class="bx-authform-starrequired">*</span> ';
-
 				textHtml += BX.util.htmlspecialchars(property.getName());
+				if (property.isRequired()) textHtml += ' <span class="bx-authform-starrequired">*</span>';
+
 				if (propertyDesc.length && propertyType != 'STRING' && propertyType != 'NUMBER' && propertyType != 'DATE')
 					textHtml += ' <small>(' + BX.util.htmlspecialchars(propertyDesc) + ')</small>';
 
@@ -6409,8 +7193,15 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 					props: { className: 'bx-soa-custom-label' },
 					html: textHtml,
 				});
+
 				propsItemNode.setAttribute('data-property-id-row', property.getId());
 				propsItemNode.appendChild(label);
+
+				if (![31, 32, 33].includes(parseInt(property.getId()))) {
+					this.setPropertyContainers(propsItemNode, property, disabled);
+					BX.addClass(label, 'modal-label');
+					return;
+				}
 			}
 
 			switch (propertyType) {
@@ -6612,6 +7403,56 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 		},
 
+		insertCustomProperty: function () {
+			let propContainer = undefined;
+			let suggestionContainer = undefined;
+
+			for (let i = 0; i < this.customProperties.length; i++) {
+				const { container, property, disabled } = this.customProperties[i];
+
+				if (disabled) {
+					prop = this.propsHiddenBlockNode.querySelector('div[data-property-id-row="' + property.getId() + '"]');
+					if (prop) {
+						values = [];
+						inputs = prop.querySelectorAll('input[type=text]');
+						if (inputs.length == 0) inputs = prop.querySelectorAll('textarea');
+
+						if (inputs.length) {
+							for (i = 0; i < inputs.length; i++) {
+								if (inputs[i].value.length) values.push(inputs[i].value);
+							}
+						}
+
+						container.innerHTML += this.valuesToString(values);
+					}
+				} else {
+					propContainer = BX.create('DIV', { props: { className: 'soa-property-container' } });
+					property.appendTo(propContainer);
+
+					switch (parseInt(property.getId())) {
+						case 38:
+						case 115:
+							suggestionContainer = BX.create('UL', {
+								attrs: {
+									id: `soa-property-${property.getId()}-suggestions`,
+								},
+								props: { className: 'suggestions-list' },
+							});
+
+							propContainer.appendChild(suggestionContainer);
+							break;
+					}
+
+					container.appendChild(propContainer);
+
+					this.alterProperty(property.getSettings(), propContainer);
+					this.bindValidation(property.getId(), propContainer);
+				}
+
+				this.customPropertiesHtml.push(container);
+			}
+		},
+
 		insertStringProperty: function (property, propsItemNode, disabled) {
 			var prop, inputs, values, i, propContainer;
 
@@ -6742,7 +7583,6 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			if (textNode) {
 				textNode.id = 'soa-property-' + settings.ID;
-				textNode.setAttribute('disabled', true);
 				if (settings.IS_ADDRESS == 'Y') textNode.setAttribute('autocomplete', 'address');
 				if (settings.IS_EMAIL == 'Y') textNode.setAttribute('autocomplete', 'email');
 				if (settings.IS_PAYER == 'Y') textNode.setAttribute('autocomplete', 'name');
@@ -6766,6 +7606,13 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			for (i = 0; i < inputs.length; i++) {
 				inputs[i].placeholder = settings.DESCRIPTION;
 				BX.addClass(inputs[i], 'form-control bx-ios-fix');
+			}
+
+			if ([31, 32, 33].includes(parseInt(settings.ID))) {
+				textNode.setAttribute('disabled', true);
+			} else {
+				BX.addClass(textNode, 'modal-input');
+				BX.removeClass(textNode, 'form-control');
 			}
 
 			del = propContainer.querySelectorAll('label');
@@ -6966,7 +7813,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 		isValidPropertiesBlock: function (excludeLocation) {
 			if (!this.options.propertyValidation) return [];
 
-			var props = this.orderBlockNode.querySelectorAll('.bx-soa-customer-field[data-property-id-row]'),
+			var props = document.querySelectorAll('.bx-soa-customer-field[data-property-id-row]'),
 				propsErrors = [],
 				id,
 				propContainer,

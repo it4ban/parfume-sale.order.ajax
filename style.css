@@ -107,12 +107,46 @@
 	justify-content: space-between;
 }
 
+.delivery-item {
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+}
+
+.bx-soa-pp-item-container .bx-soa-pp-company.delivery-content {
+	display: block;
+}
+
+.delivery-container {
+	width: 100%;
+}
+
+.order__accordion-delivery-form {
+	align-items: stretch;
+	gap: 15px;
+}
+
+.order__accordion-delivery-label img {
+	max-width: 70px;
+	height: auto;
+	max-height: 50px;
+}
+
+.order__accordion-delivery-label p {
+	text-align: left;
+}
+
+.order__accordion-top-sub-title {
+	padding-left: 0;
+	margin: 15px 0 28px;
+}
+
 .modal-field {
 	display: flex;
 	flex-direction: column;
 	justify-content: end;
 	margin-top: 20px;
-	flex: 1 1 auto;
+	flex: 1 1 100%;
 	position: relative;
 }
 
@@ -125,6 +159,31 @@
 	color: #555;
 	margin-bottom: 6px;
 	display: flex;
+}
+
+.pay-slide .bx-soa-pp-company-smalltitle {
+	text-align: center;
+}
+
+.modal-messages {
+	display: none;
+	margin-bottom: 10px;
+	font-size: 14px;
+}
+
+.modal-success {
+	color: #4789eb;
+}
+
+.modal-error {
+	color: #d93025;
+}
+
+.modal-error-message {
+	background: #ffe9e9;
+	border: 1px solid #e57373;
+	padding: 8px 12px;
+	border-radius: 6px;
 }
 
 .modal-input,
@@ -1685,7 +1744,7 @@
 	font-size: 12px;
 	line-height: 15.96px;
 	color: var(--color-dark);
-	text-align: center;
+	text-align: left;
 }
 .bx-soa-pp-company-title {
 	font-size: 19px;

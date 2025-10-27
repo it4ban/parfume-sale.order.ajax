@@ -8,6 +8,17 @@ use Bitrix\Main\Localization\Loc;
 use Bitrix\Sale\Delivery\Services\Manager as DeliveryManager;
 use Bitrix\Main\Page\Asset;
 
+// $file = $_SERVER['DOCUMENT_ROOT'] . '/local/templates/main/components/bitrix/sale.order.ajax/order/libs/MeasoftCourier.php';
+// if (!file_exists($file)) {
+// 	die('Файл MeasoftCourier.php не найден по пути: ' . $file);
+// }
+// require_once $file;
+
+// INCLUDES
+require_once($_SERVER['DOCUMENT_ROOT'] . '/local/templates/main/components/bitrix/sale.order.ajax/order/libs/getDeliveryCompany.php');
+
+$deliveryCompanies = getDeliveryCompanies();
+
 /**
  * @var array $arParams
  * @var array $arResult
@@ -337,11 +348,12 @@ if ((string)$request->get('ORDER_ID') !== '') {
 	// s($arResult['JS_DATA']['ORDER_PROP']['properties']);
 
 	foreach ($arResult['JS_DATA']['ORDER_PROP']['properties'] as $property) {
-		// s($property);
 		// $property — это один элемент массива
 		$orderData[$property['CODE']] = [
+			'ID' => $property['ID'],
 			'NAME' => $property['NAME'],
-			'VALUE' => $property['VALUE'][0]
+			'VALUE' => $property['VALUE'][0],
+			'REQUIRED' => $property['REQUIRED']
 		];
 	}
 
@@ -381,9 +393,13 @@ if ((string)$request->get('ORDER_ID') !== '') {
 		}
 	}
 
+
+
 	// s($arUserProfile);
 
 	// s($orderData);
+
+	// s($deliveryCompanies);
 ?>
 	<form action="<?= POST_FORM_ACTION_URI ?>" method="POST" name="ORDER_FORM" id="bx-soa-order-form" enctype="multipart/form-data">
 		<?php
@@ -672,6 +688,7 @@ if ((string)$request->get('ORDER_ID') !== '') {
 			userProfile: <?= CUtil::PhpToJSObject($arUserProfile, false, true) ?>,
 			templateFolder: '<?= CUtil::JSEscape($templateFolder) ?>',
 			deliveryTypeById: <?= CUtil::PhpToJSObject($deliveryTypeById, false, true)  ?>,
+			deliveryCompanies: <?= CUtil::PhpToJSObject($deliveryCompanies, false, true) ?>,
 			propertyValidation: true,
 			showWarnings: true,
 			pickUpMap: {
@@ -798,5 +815,10 @@ if ((string)$request->get('ORDER_ID') !== '') {
 	}
 }
 
+// LIBS
+$this->addExternalCss($templateFolder . '/css/suggestions.min.css');
+$this->addExternalJs($templateFolder . '/scripts/suggestions.min.js');
+// HANDLERS
 $this->addExternalJs($templateFolder . '/scripts/index_handler.min.js');
+
 ?>

@@ -66,6 +66,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			this.customProperties = [];
 			this.customPropertiesHtml = [];
+			this.addressValidation = {};
 		},
 
 		/**
@@ -89,6 +90,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			this.deliveryTypeById = parameters.deliveryTypeById || {};
 			this.orderData = parameters.orderData || [];
 			this.userProfile = parameters.userProfile || [];
+			this.deliveryCompanies = parameters.deliveryCompanies;
 
 			this.orderBlockNode = BX(parameters.orderBlockId);
 			this.totalBlockNode = BX(parameters.totalBlockId);
@@ -174,6 +176,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				actionData: actionData,
 				cancel: false,
 			};
+
 			BX.Event.EventEmitter.emit('BX.Sale.OrderAjaxComponent:onBeforeSendRequest', eventArgs);
 			if (eventArgs.cancel) {
 				this.endLoader();
@@ -1274,6 +1277,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			if (this.result.TOTAL) {
 				total = this.result.TOTAL;
+
 				this.options.showOrderWeight = total.ORDER_WEIGHT && parseFloat(total.ORDER_WEIGHT) > 0;
 				this.options.showPriceWithoutDiscount =
 					parseFloat(total.ORDER_PRICE) < parseFloat(total.PRICE_WITHOUT_DISCOUNT_VALUE);
@@ -1564,6 +1568,10 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 
 			this.checkNotifications();
+
+			if (typeof this.handleAddressSuggestions === 'function') {
+				this.handleAddressSuggestions();
+			}
 
 			// if (this.activeSectionId !== this.regionBlockNode.id)
 			// 	this.editFadeRegionContent(this.regionBlockNode.querySelector('.bx-soa-section-content'));
@@ -5064,7 +5072,10 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				deliveryNode = BX.create('DIV', { props: { className: 'bx-soa-pp row' } });
 				this.editDeliveryItems(deliveryNode);
 				deliveryContent.appendChild(deliveryNode);
-				this.editDeliveryInfo(deliveryNode);
+
+				const deliverySelected = document.querySelector('.delivery-item--selected');
+
+				this.editDeliveryInfo(deliverySelected);
 
 				if (this.params.SHOW_COUPONS_DELIVERY == 'Y') this.editCoupons(deliveryContent);
 
@@ -5092,7 +5103,9 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 		editDeliveryInfo: function (deliveryNode) {
 			if (!this.result.DELIVERY) return;
 
-			var deliveryInfoContainer = BX.create('DIV', { props: { className: 'col-sm-12 bx-soa-pp-desc-container' } }),
+			var deliveryInfoContainer = BX.create('DIV', {
+					props: { className: 'bx-soa-pp-desc-container delivery-container' },
+				}),
 				currentDelivery,
 				logotype,
 				name,
@@ -5194,13 +5207,13 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			deliveryInfoContainer.appendChild(
 				BX.create('DIV', {
-					props: { className: 'bx-soa-pp-company' },
+					props: { className: 'bx-soa-pp-company delivery-content' },
 					children: [subTitle, title, clear, extraServicesNode, infoList],
 				}),
 			);
 			deliveryNode.appendChild(deliveryInfoContainer);
 
-			var addressData = {
+			const addressData = {
 				input: BX.create('INPUT', {
 					props: {
 						className: 'md-input',
@@ -5228,7 +5241,7 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 					this.handleCourierItem(addressData);
 					break;
 				case 'courier:pickup':
-					this.handlePVZItem(this.deliveryData.item);
+					this.handlePVZItem(addressData);
 					break;
 			}
 
@@ -5364,6 +5377,12 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				itemNode,
 				logoNode;
 
+			const diliveryWrapper = BX.create('DIV', {
+				props: {
+					className: 'delivery-item',
+				},
+			});
+
 			logoNode = BX.create('DIV', { props: { className: 'bx-soa-pp-company-image' } });
 			logotype = this.getImageSources(item, 'LOGOTIP');
 			if (logotype && logotype.src_2x) {
@@ -5426,11 +5445,12 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 
 			itemNode = BX.create('DIV', {
-				props: { className: 'bx-soa-pp-company col-lg-12 col-sm-12 col-xs-12' },
+				props: { className: 'bx-soa-pp-company' },
 				children: [label, title],
 				events: { click: BX.proxy(this.selectDelivery, this) },
 			});
 			checked && BX.addClass(itemNode, 'bx-selected');
+			checked && BX.addClass(diliveryWrapper, 'delivery-item--selected');
 
 			if (checked && this.result.LAST_ORDER_DATA.PICK_UP) this.lastSelectedDelivery = deliveryId;
 
@@ -5438,7 +5458,9 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				this.handleSelectDelivery(item.ID, item);
 			}
 
-			return itemNode;
+			diliveryWrapper.appendChild(itemNode);
+
+			return diliveryWrapper;
 		},
 
 		handleSelectDelivery: function (deliveryId, item) {
@@ -5615,6 +5637,91 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 		},
 
+		createDeliveryCompanies: function () {
+			return BX.create('DIV', {
+				props: {
+					className: 'order__accordion-delivery-form',
+				},
+				children: this.deliveryCompanies.map((item) => {
+					return BX.create('BUTTON', {
+						props: {
+							className: 'order__accordion-delivery-label',
+						},
+						attrs: {
+							type: 'button',
+						},
+						children: [
+							BX.create('IMG', {
+								attrs: {
+									src: item.IMG,
+									alt: item.NAME,
+								},
+							}),
+							BX.create('P', {
+								html: `
+										${item.NAME} <br>
+										${item.DESCRIPTION}
+									`,
+							}),
+						],
+					});
+				}),
+			});
+		},
+
+		selectDeliveryCompany: function (currentButton) {
+			console.log(currentButton);
+			console.log(document.querySelector('#measoftMapBlock'));
+		},
+
+		handleDeliveryCompany: function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const button = e.currentTarget;
+			const allButtons = document.querySelectorAll('.order__accordion-delivery-label');
+
+			allButtons.forEach((btn) => btn.classList.remove('is-active'));
+			button.classList.add('is-active');
+
+			this.selectDeliveryCompany(button.innerHTML);
+		},
+
+		handlePVZItem: function (addressData) {
+			let itemContainer = document.querySelector('.bx-soa-pp-desc-container.delivery-container');
+			if (itemContainer) {
+				let subTitle = itemContainer.querySelector('.bx-soa-pp-company-subTitle');
+
+				let orderMessage = BX.create('DIV', {
+					props: {
+						className: 'order__accordion-top-sub-title',
+					},
+					text: 'Отправка региональных заказов осуществляется после 100% оплаты.',
+				});
+				let orderCompanies = this.createDeliveryCompanies();
+
+				if (subTitle) {
+					BX.insertAfter(addressData.input, subTitle);
+					BX.insertAfter(addressData.button, addressData.input);
+					BX.insertAfter(orderMessage, addressData.button);
+					BX.insertAfter(orderCompanies, orderMessage);
+				} else {
+					itemContainer.insertBefore(addressData.input, itemContainer.firstChild);
+					BX.insertAfter(addressData.button, addressData.input);
+					BX.insertAfter(orderCompanies, addressData.button);
+				}
+			} else {
+				console.error('Failed to initialize shipping container');
+			}
+
+			const deliveryButtons = document.querySelectorAll('.order__accordion-delivery-label');
+			deliveryButtons.forEach((button) => {
+				button.classList.remove('is-active');
+
+				BX.bind(button, 'click', this.handleDeliveryCompany.bind(this));
+			});
+		},
+
 		handleCourierAddres: function () {
 			this.initAddresPopup();
 
@@ -5633,17 +5740,21 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			const modal = BX(modalId);
 			if (!modal) return;
 
-			BX.addClass(modal, 'is-open');
+			if ('inert' in HTMLElement.prototype) modal.inert = false;
 			modal.setAttribute('aria-hidden', 'false');
+			BX.addClass(modal, 'is-open');
 
 			const closeButton = modal.querySelector('.modal__close');
-			if (closeButton) {
+			const overlay = modal.querySelector('.modal__overlay');
+
+			if (closeButton && !closeButton.dataset.bound) {
 				BX.bind(closeButton, 'click', (e) => this.handleClosePopup(e, modalId));
+				closeButton.dataset.bound = 'true';
 			}
 
-			const overlay = modal.querySelector('.modal__overlay');
-			if (overlay) {
+			if (overlay && !overlay.dataset.bound) {
 				BX.bind(overlay, 'click', (e) => this.handleClosePopup(e, modalId));
+				overlay.dataset.bound = 'true';
 			}
 		},
 
@@ -5654,8 +5765,12 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			const modal = BX(modalId);
 			if (!modal) return;
 
-			BX.removeClass(modal, 'is-open');
+			const active = document.activeElement;
+			if (modal.contains(active)) active.blur();
+
+			if ('inert' in HTMLElement.prototype) modal.inert = true;
 			modal.setAttribute('aria-hidden', 'true');
+			BX.removeClass(modal, 'is-open');
 		},
 
 		initDayWeaks: function () {
@@ -5860,148 +5975,12 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 						BX.create('DIV', {
 							props: {
-								className: 'modal-errors',
+								className: 'modal-messages',
 							},
 						}),
 
 						// citySelect,
-
-						// BX.create('DIV', {
-						// 	props: { className: 'modal-field' },
-						// 	children: [
-						// 		BX.create('LABEL', {
-						// 			attrs: { for: 'populated-area' },
-						// 			props: { className: 'modal-label' },
-						// 			html: 'Населенный пункт <span class="required">*</span>',
-						// 		}),
-						// 		BX.create('INPUT', {
-						// 			attrs: {
-						// 				id: 'populated-area',
-						// 				type: 'text',
-						// 				placeholder: 'Улица, дом',
-						// 				value: this.orderData.ADDRESS.VALUE,
-						// 			},
-						// 			props: { className: 'modal-input' },
-						// 		}),
-						// 		BX.create('UL', {
-						// 			attrs: {
-						// 				id: 'populated-area-suggestions',
-						// 			},
-						// 			props: { className: 'suggestions-list' },
-						// 		}),
-						// 	],
-						// }),
-
 						// mapSelect,
-
-						// BX.create('DIV', {
-						// 	props: { className: 'modal-field' },
-						// 	children: [
-						// 		BX.create('LABEL', {
-						// 			attrs: { for: 'street' },
-						// 			props: { className: 'modal-label' },
-						// 			html: 'Улица, дом <span class="required">*</span>',
-						// 		}),
-						// 		BX.create('INPUT', {
-						// 			attrs: { id: 'street', type: 'text', placeholder: 'Улица, дом' },
-						// 			props: { className: 'modal-input' },
-						// 		}),
-						// 		BX.create('UL', {
-						// 			attrs: {
-						// 				id: 'street-suggestions',
-						// 			},
-						// 			props: { className: 'suggestions-list' },
-						// 		}),
-						// 	],
-						// }),
-
-						// ряд инпутов: кв, офис + подъезд
-						// BX.create('DIV', {
-						// 	props: { className: 'modal-row' },
-						// 	children: [
-						// 		BX.create('DIV', {
-						// 			props: { className: 'modal-field' },
-						// 			children: [
-						// 				BX.create('LABEL', {
-						// 					attrs: { for: 'flat' },
-						// 					props: { className: 'modal-label' },
-						// 					html: 'Кв, офис <span class="required">*</span>',
-						// 				}),
-						// 				BX.create('INPUT', {
-						// 					attrs: { id: 'flat', type: 'text', placeholder: 'Квартира/офис' },
-						// 					props: { className: 'modal-input' },
-						// 				}),
-						// 			],
-						// 		}),
-						// 		BX.create('DIV', {
-						// 			props: { className: 'modal-field' },
-						// 			children: [
-						// 				BX.create('LABEL', {
-						// 					attrs: { for: 'entrance' },
-						// 					props: { className: 'modal-label' },
-						// 					html: 'Подъезд <span class="required">*</span>',
-						// 				}),
-						// 				BX.create('INPUT', {
-						// 					attrs: { id: 'entrance', type: 'number', placeholder: 'Подъезд' },
-						// 					props: { className: 'modal-input' },
-						// 				}),
-						// 			],
-						// 		}),
-						// 	],
-						// }),
-
-						// ряд инпутов: этаж + домофон
-						// BX.create('DIV', {
-						// 	props: { className: 'modal-row' },
-						// 	children: [
-						// 		BX.create('DIV', {
-						// 			props: { className: 'modal-field' },
-						// 			children: [
-						// 				BX.create('LABEL', {
-						// 					attrs: { for: 'floor' },
-						// 					props: { className: 'modal-label' },
-						// 					text: 'Этаж',
-						// 				}),
-						// 				BX.create('INPUT', {
-						// 					attrs: { id: 'floor', type: 'number', placeholder: 'Этаж' },
-						// 					props: { className: 'modal-input' },
-						// 				}),
-						// 			],
-						// 		}),
-						// 		BX.create('DIV', {
-						// 			props: { className: 'modal-field' },
-						// 			children: [
-						// 				BX.create('LABEL', {
-						// 					attrs: { for: 'intercom' },
-						// 					props: { className: 'modal-label' },
-						// 					text: 'Домофон',
-						// 				}),
-						// 				BX.create('INPUT', {
-						// 					attrs: { id: 'intercom', type: 'text', placeholder: 'Домофон' },
-						// 					props: { className: 'modal-input' },
-						// 				}),
-						// 			],
-						// 		}),
-						// 	],
-						// }),
-
-						// textarea
-						// BX.create('DIV', {
-						// 	props: { className: 'modal-field' },
-						// 	children: [
-						// 		BX.create('LABEL', {
-						// 			attrs: { for: 'comment' },
-						// 			props: { className: 'modal-label' },
-						// 			text: 'Комментарии курьеру',
-						// 		}),
-						// 		BX.create('TEXTAREA', {
-						// 			attrs: { id: 'comment', placeholder: 'Впишите текст' },
-						// 			props: { className: 'modal-textarea-input' },
-						// 		}),
-						// 	],
-						// }),
-
-						// кнопки
 					],
 				});
 
@@ -6031,6 +6010,8 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 				);
 				BX.append(popupContainer, modalRoot);
 
+				this.handleAddressSuggestions();
+
 				BX.bind(document.querySelector('.modal-btn.cancel'), 'click', (e) =>
 					this.handleClosePopup(e, 'change-recipient-modal'),
 				);
@@ -6038,29 +6019,197 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 			}
 		},
 
+		handleSuggestionSelect: async function (suggestion) {
+			const data = suggestion.data;
+
+			console.log(data);
+
+			this.addressValidation = {
+				house: data.house?.trim() || '',
+				flat: data.flat?.trim() || '',
+				room: data.room?.trim() || '',
+				street: data.street?.trim() || '',
+				city: data.city?.trim() || '',
+				value: suggestion.value,
+			};
+		},
+
+		handleAddressSuggestions: function () {
+			const token = '72a2cc8f7ce97a6d1acbf5c572a5bfd49d857e07';
+			const serviceUrl = 'https://suggestions.dadata.ru/suggestions/api/4_1/rs/';
+			const fields = [
+				'#soa-property-38', // населённый пункт
+				'#soa-property-115', // улица, дом
+				'#soa-property-116', // квартира
+				'#soa-property-117', // подъезд
+				'#soa-property-118', // этаж
+				'#soa-property-119', // домофон
+			];
+
+			const populatedInput = document.querySelector(fields[0]);
+			const streetInput = document.querySelector(fields[1]);
+			const flatInput = document.querySelector(fields[2]);
+			// const porchInput = document.querySelector(fields[3]);
+			// const floorInput = document.querySelector(fields[4]);
+			// const intercomInput = document.querySelector(fields[5]);
+
+			document.querySelectorAll('.suggestions-wrapper').forEach((el) => el.remove());
+			[populatedInput, streetInput, flatInput].forEach((input) => {
+				if (!input.parentElement.querySelector('.dadata-container')) {
+					const container = document.createElement('div');
+					container.className = 'dadata-container';
+					container.style.position = 'relative';
+					input.parentElement.appendChild(container);
+					container.appendChild(input);
+				}
+			});
+
+			const populatedOptions = {
+				token,
+				type: 'address',
+				hint: false,
+				serviceUrl,
+				triggerSelectOnBlur: false,
+				params: {
+					from_bound: { value: 'city' },
+					to_bound: { value: 'settlement' },
+				},
+				onSelect: (suggestion) => this.handleSuggestionSelect(suggestion),
+			};
+
+			const streetOptions = {
+				token,
+				type: 'address',
+				serviceUrl,
+				hint: false,
+				triggerSelectOnBlur: false,
+				params: {
+					from_bound: { value: 'street' },
+					to_bound: { value: 'street' },
+				},
+				onSelect: (suggestion) => this.handleSuggestionSelect(suggestion),
+			};
+
+			const flatOptions = {
+				token,
+				type: 'address',
+				serviceUrl,
+				hint: false,
+				noSuggestionsHint: false,
+				triggerSelectOnBlur: false,
+				params: {
+					from_bound: { value: 'house' },
+					to_bound: { value: 'flat' },
+				},
+				onSelect: (suggestion) => this.handleSuggestionSelect(suggestion),
+			};
+
+			const populatedSuggestions = Dadata.createSuggestions(populatedInput, populatedOptions);
+			const streetSuggestions = Dadata.createSuggestions(streetInput, streetOptions, populatedSuggestions);
+			const flatSuggestion = Dadata.createSuggestions(flatInput, flatOptions, streetSuggestions);
+		},
+
+		setModalStatus: function (status, container, message = '') {
+			if (!container) return;
+
+			container.style.display = 'block';
+
+			switch (status) {
+				case 'loading':
+					container.innerHTML = `<div class="modal-loading">Сохранение</div>`;
+					break;
+				case 'success':
+					container.innerHTML = `<div class="modal-success">${message}</div>`;
+					break;
+				case 'error':
+					container.innerHTML = `<div class="modal-error">${message}</div>`;
+					break;
+				case 'idle':
+				default:
+					container.innerHTML = '';
+					container.style.display = 'none';
+					break;
+			}
+		},
+
+		getValidateFields: function (data) {
+			return Object.entries(this.orderData)
+				.filter(([key, _]) => key.startsWith('UF_') || key.startsWith('ADDRESS'))
+				.map(([_, prop]) => {
+					const value = data.get(`ORDER_PROP_${prop.ID}`) ?? prop.VALUE;
+					const existing = (this.userProfile?.PROPS || []).find((p) => p.ORDER_PROPS_ID == prop.ID);
+
+					return {
+						ID: prop.ID,
+						NAME: prop.NAME,
+						VALUE: value,
+						REQUIRED: prop.REQUIRED,
+						USER_PROPS_ID: existing?.USER_PROPS_ID ?? null,
+						VALUE_ID: existing?.ID ?? null,
+					};
+				});
+		},
+
+		handleAddressSave: async function (e, deliveryForm) {
+			const data = new FormData(deliveryForm);
+
+			console.log(this.orderData);
+
+			const validateFields = this.getValidateFields(data);
+			console.log(validateFields);
+
+			try {
+				const response = await fetch('/ajax/order_save_handler.php', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						userProfile: this.userProfile,
+						validateFields,
+					}),
+				});
+
+				const result = await response.json();
+				if (result.status === 'success') {
+					this.handleClosePopup(e, 'change-recipient-modal');
+					this.sendRequest();
+					return { status: 'success', message: result.message };
+				}
+
+				return { status: 'error', message: result.message };
+			} catch (error) {
+				return { status: 'error', message: 'Не удалось отправить данные.' };
+			}
+		},
+
+		handleLocationChange: async function () {
+			console.log('change location');
+		},
+
 		handleOrderSave: async function (e) {
 			e.preventDefault();
 			e.stopPropagation();
 
 			const deliveryForm = document.querySelector('.modal__dialog');
+			if (!deliveryForm) {
+				console.error('Не найдена форма доставки (.modal__dialog)');
+				return;
+			}
+
+			const messageContainer = deliveryForm.querySelector('.modal-messages');
+			if (messageContainer) this.setModalStatus('idle', messageContainer);
 
 			try {
-				const data = new FormData(deliveryForm);
-				data.append('userProfile', JSON.stringify(this.userProfile));
+				this.setModalStatus('loading', messageContainer);
 
-				const response = await fetch('/ajax/order_save_handler.php', {
-					method: 'POST',
-					body: data,
-				});
-
-				if (response.ok) {
-					console.log(await response.json());
-					this.handleClosePopup(e, 'change-recipient-modal');
+				const result = await this.handleAddressSave(e, deliveryForm);
+				if (result.status == 'success') {
+					this.setModalStatus('success', messageContainer, 'Aдрес успешно сохранен!');
+					await this.handleLocationChange();
 				} else {
-					console.error(`${response.status}: ${response.statusText}`);
+					this.setModalStatus('error', messageContainer, result.message || 'Ошибка при сохранении');
 				}
 			} catch (error) {
-				console.error('Error in save order:', error);
+				this.setModalStatus('error', messageContainer, 'Произошла неизвестная ошибка. Пожалуйста попробуйде позже.');
 			}
 		},
 
@@ -6141,8 +6290,6 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 
 			return mapButton;
 		},
-
-		handlePVZItem: function (item) {},
 
 		editFadeDeliveryContent: function (node) {
 			var selectedDelivery = this.getSelectedDelivery(),
@@ -7404,45 +7551,27 @@ BX.namespace('BX.Sale.OrderAjaxComponent');
 		},
 
 		insertCustomProperty: function () {
-			let propContainer = undefined;
-			let suggestionContainer = undefined;
+			let propContainer;
 
 			for (let i = 0; i < this.customProperties.length; i++) {
 				const { container, property, disabled } = this.customProperties[i];
 
 				if (disabled) {
-					prop = this.propsHiddenBlockNode.querySelector('div[data-property-id-row="' + property.getId() + '"]');
+					const prop = this.propsHiddenBlockNode.querySelector('div[data-property-id-row="' + property.getId() + '"]');
 					if (prop) {
-						values = [];
-						inputs = prop.querySelectorAll('input[type=text]');
-						if (inputs.length == 0) inputs = prop.querySelectorAll('textarea');
-
-						if (inputs.length) {
-							for (i = 0; i < inputs.length; i++) {
-								if (inputs[i].value.length) values.push(inputs[i].value);
-							}
+						let values = [];
+						let inputs = prop.querySelectorAll('input[type=text], textarea');
+						for (let k = 0; k < inputs.length; k++) {
+							if (inputs[k].value.length) values.push(inputs[k].value);
 						}
-
-						container.innerHTML += this.valuesToString(values);
+						container.innerHTML = this.valuesToString(values);
 					}
 				} else {
+					const oldContainer = container.querySelector('.soa-property-container');
+					if (oldContainer) BX.remove(oldContainer);
+
 					propContainer = BX.create('DIV', { props: { className: 'soa-property-container' } });
 					property.appendTo(propContainer);
-
-					switch (parseInt(property.getId())) {
-						case 38:
-						case 115:
-							suggestionContainer = BX.create('UL', {
-								attrs: {
-									id: `soa-property-${property.getId()}-suggestions`,
-								},
-								props: { className: 'suggestions-list' },
-							});
-
-							propContainer.appendChild(suggestionContainer);
-							break;
-					}
-
 					container.appendChild(propContainer);
 
 					this.alterProperty(property.getSettings(), propContainer);

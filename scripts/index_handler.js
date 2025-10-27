@@ -236,8 +236,9 @@ function toggleTimeBlocksByDay(date) {
 
 function handleInitCalendar() {
 	try {
-		const calendarBtn = document.querySelector('.order__accordion-form-day-button');
+		// const calendarBtn = document.querySelector('.order__accordion-form-day-button');
 		const calendarNode = document.getElementById('calendar');
+		if (!calendarNode) return;
 
 		const eventsData = initEventsDate();
 
@@ -273,7 +274,7 @@ function handleInitCalendar() {
 			},
 		});
 
-		calendarBtn.addEventListener('click', (e) => handleCalendarButton(e, calendarNode));
+		// calendarBtn.addEventListener('click', (e) => handleCalendarButton(e, calendarNode));
 
 		return calendar;
 	} catch (err) {
@@ -296,125 +297,6 @@ function handleInitTimeTiles(calendar) {
 	const timeLabels = document.querySelectorAll('.order__accordion-form-time-label');
 	timeLabels.forEach((label) => {
 		label.addEventListener('click', () => handleTimeClick(label));
-	});
-}
-
-function handleInitAddressSuggestions() {
-	const token = '72a2cc8f7ce97a6d1acbf5c572a5bfd49d857e07';
-
-	const fields = [
-		{
-			id: 'soa-property-38',
-			type: 'address',
-			full: true,
-			ulClass: 'suggestions-list',
-		},
-		{
-			id: 'soa-property-115',
-			type: 'address',
-			full: false,
-			ulClass: 'suggestions-list',
-		},
-	];
-
-	fields.forEach((field) => {
-		const input = document.getElementById(field.id);
-		if (!input) return;
-
-		let container = input.parentNode.querySelector(`.${field.ulClass}`);
-		if (!container) {
-			container = document.createElement('ul');
-			container.className = field.ulClass;
-			input.parentNode.appendChild(container);
-		}
-
-		input.addEventListener('input', async () => {
-			const query = input.value.trim();
-			if (!query) {
-				container.innerHTML = '';
-				container.style.display = 'none';
-				return;
-			}
-
-			let fullQuery = query;
-			if (field.id === 'street') {
-				const cityInput = document.getElementById('soa-property-38');
-				const cityValue = cityInput ? cityInput.value.trim() : '';
-				if (cityValue) {
-					fullQuery = `${cityValue}, ${query}`;
-				}
-			}
-
-			try {
-				const response = await fetch('https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						Authorization: 'Token ' + token,
-					},
-					body: JSON.stringify({
-						query: fullQuery,
-						count: 5,
-					}),
-				});
-
-				const data = await response.json();
-				container.innerHTML = '';
-
-				data.suggestions.forEach((suggestion) => {
-					let suggestionText;
-					if (field.full) {
-						suggestionText = suggestion.value;
-					} else {
-						const city = suggestion.data.city_with_type || suggestion.data.settlement_with_type || '';
-						const street = suggestion.data.street_with_type || '';
-						const house = suggestion.data.house ? `, ${suggestion.data.house}` : '';
-						suggestionText = `${city} ${street}${house}`.trim();
-					}
-
-					const li = document.createElement('li');
-					li.textContent = suggestionText;
-					li.dataset.suggestion = JSON.stringify(suggestion);
-					container.appendChild(li);
-				});
-
-				container.style.display = data.suggestions.length ? 'block' : 'none';
-			} catch (err) {
-				console.error(err);
-			}
-		});
-
-		container.addEventListener('click', (event) => {
-			if (event.target.tagName !== 'LI') return;
-			const suggestion = JSON.parse(event.target.dataset.suggestion);
-
-			const populatedAreaInput = document.getElementById('soa-property-38');
-			const streetInput = document.getElementById('soa-property-115');
-			const flatInput = document.getElementById('soa-property-118');
-
-			if (populatedAreaInput) {
-				populatedAreaInput.value = suggestion.value || '';
-			}
-
-			if (streetInput) {
-				const streetValue = `${suggestion.data.street_with_type || ''} ${suggestion.data.house || ''}`.trim();
-				streetInput.value = streetValue;
-			}
-
-			if (flatInput) {
-				flatInput.value = suggestion.data.flat || '';
-			}
-
-			container.innerHTML = '';
-			container.style.display = 'none';
-		});
-
-		document.addEventListener('click', (e) => {
-			if (!input.contains(e.target) && !container.contains(e.target)) {
-				container.innerHTML = '';
-				container.style.display = 'none';
-			}
-		});
 	});
 }
 
@@ -507,15 +389,23 @@ function handleInitInputPoints() {
 
 function handleInit() {
 	const calendarInstance = handleInitCalendar();
+	if (!calendarInstance) return;
 
 	handleInitInputPoints();
 	handleInitTiles(calendarInstance);
 	handleInitTimeTiles(calendarInstance);
-	handleInitAddressSuggestions();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
 	handleInit();
+});
+
+document.addEventListener('click', (e) => {
+	const btn = e.target.closest('.order__accordion-form-day-button');
+	if (!btn) return;
+
+	const calendarNode = document.getElementById('calendar');
+	if (calendarNode) handleCalendarButton(e, calendarNode);
 });
 
 BX.addCustomEvent('onAjaxSuccess', () => {
